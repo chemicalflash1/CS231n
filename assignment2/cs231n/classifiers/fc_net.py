@@ -193,6 +193,10 @@ class FullyConnectedNet(object):
             self.params['W' + str(i+1)] = np.random.normal(scale=weight_scale, size=(dims[i], dims[i+1]))
             self.params['b' + str(i+1)] = np.zeros(dims[i+1])
 
+            if self.use_batchnorm and i != self.num_layers-1:
+                self.params['beta' + str(i+1)] = np.zeros(1)
+                self.params['gamma' + str(i+1)] = np.ones(1)
+
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -254,7 +258,12 @@ class FullyConnectedNet(object):
         caches = {}
         for i in range(1, self.num_layers+1):
             if i != self.num_layers:
-                scores, caches['c' + str(i)] = affine_relu_forward(scores, self.params["W" + str(i)], self.params['b' + str(i)])
+                if self.use_batchnorm:
+                    a, caches['fc_cache' + str(i)] = affine_forward(scores, self.params["W" + str(i)], self.params['b' + str(i)])
+                    a, caches['bn_cache' + str(i)] = batchnorm_forward(a,  self.params["gamma" + str(i)], self.params["beta" + str(i)], self.bn_params[i-1])
+                    scores, caches['c' + str(i)] = relu_forward(a)
+                else:
+                    scores, caches['c' + str(i)] = affine_relu_forward(scores, self.params["W" + str(i)], self.params['b' + str(i)])
             else:
                 scores, caches['c' + str(i)] = affine_forward(scores, self.params["W" + str(i)], self.params['b' + str(i)])
         ############################################################################
@@ -288,10 +297,18 @@ class FullyConnectedNet(object):
             if i == self.num_layers:
                 dx, dw, db = affine_backward(dx, caches['c' + str(i)])
             else:
-                dx, dw, db = affine_relu_backward(dx, caches['c' + str(i)])
+                if self.use_batchnorm:
+                    da = relu_backward(dx, caches['c' + str(i)])
+                    dbn, dgamma, dbeta = batchnorm_backward(da, caches['bn_cache' + str(i)])
+                    dx, dw, db = affine_backward(dbn, caches['fc_cache' + str(i)])
+                else:
+                    dx, dw, db = affine_relu_backward(dx, caches['c' + str(i)])
 
             grads['W' + str(i)] = dw + (self.reg * self.params['W' + str(i)])
             grads['b' + str(i)] = db
+            if self.use_batchnorm and i != self.num_layers:
+                grads['gamma' + str(i)] = dgamma
+                grads['beta' + str(i)] = dbeta
 
         loss = data_loss + reg_loss
 
