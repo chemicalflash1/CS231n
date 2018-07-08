@@ -386,7 +386,23 @@ def conv_forward_naive(x, w, b, conv_param):
 	# TODO: Implement the convolutional forward pass.                         #
 	# Hint: you can use the function np.pad for padding.                      #
 	###########################################################################
-	pass
+	N, C, H, W = x.shape
+	F, C, HH, WW = w.shape
+	pad = conv_param['pad']
+	stride = conv_param['stride']
+
+	H_prime = 1 + (H + 2 * pad - HH) // stride
+	W_prime = 1 + (W + 2 * pad - WW) // stride
+
+	x_padded = np.pad(x, [(0, 0), (0, 0), (pad, pad), (pad, pad)], mode='constant')
+
+	out = np.zeros((N, F, H_prime, W_prime))
+	for i in range(H_prime):
+		for j in range(W_prime):
+			x_selected = x_padded[:, :, i * stride:(i * stride + HH), j * stride:(j * stride + WW)]
+			for f in range(F):
+				out[:, f, i, j] = np.sum(w[f] * x_selected, axis=(1, 2, 3)) + b[f]
+
 	###########################################################################
 	#                             END OF YOUR CODE                            #
 	###########################################################################
@@ -411,7 +427,30 @@ def conv_backward_naive(dout, cache):
 	###########################################################################
 	# TODO: Implement the convolutional backward pass.                        #
 	###########################################################################
-	pass
+	x, w, b, conv_param = cache
+
+	N, C, H, W = x.shape
+	F, C, HH, WW = w.shape
+	pad = conv_param['pad']
+	stride = conv_param['stride']
+
+	H_prime = 1 + (H + 2 * pad - HH) // stride
+	W_prime = 1 + (W + 2 * pad - WW) // stride
+
+	x_padded = np.pad(x, [(0, 0), (0, 0), (pad, pad), (pad, pad)], mode='constant')
+
+	dw = np.zeros(w.shape)
+	dx_padded = np.zeros(x_padded.shape)
+
+	for i in range(H_prime):
+		for j in range(W_prime):
+			x_selected = x_padded[:, :, i * stride:(i * stride + HH), j * stride:(j * stride + WW)]
+			for f in range(F):
+				dw[f] += np.sum((x_selected.T * dout[:, f, i, j]).T, axis=0)
+			dx_padded[:, :, i * stride:(i * stride + HH), j * stride:(j * stride + WW)] += np.tensordot(dout[:,:,i,j], w, axes=[1, 0])
+
+	dx = dx_padded[:, :, pad:-pad, pad:-pad]
+	db = np.sum(dout, axis=(0, 2, 3))
 	###########################################################################
 	#                             END OF YOUR CODE                            #
 	###########################################################################
@@ -437,7 +476,20 @@ def max_pool_forward_naive(x, pool_param):
 	###########################################################################
 	# TODO: Implement the max pooling forward pass                            #
 	###########################################################################
-	pass
+	N, C, H, W = x.shape
+	H_pool = pool_param['pool_height']
+	W_pool = pool_param['pool_width']
+	stride = pool_param['stride']
+
+	out_H = (H - H_pool) // stride + 1
+	out_W = (W - W_pool) // stride + 1
+
+	out = np.zeros([N, C, out_H, out_W])
+
+	for i in range(out_H):
+		for j in range(out_W):
+			x_selected = x[:, :, i * stride: (i * stride + H_pool), j * stride: (j * stride + W_pool)]
+			out[:, :, i, j] = np.amax(x_selected, axis=(2, 3))
 	###########################################################################
 	#                             END OF YOUR CODE                            #
 	###########################################################################
@@ -460,7 +512,23 @@ def max_pool_backward_naive(dout, cache):
 	###########################################################################
 	# TODO: Implement the max pooling backward pass                           #
 	###########################################################################
-	pass
+	(x, pool_param) = cache
+	dx = np.zeros(x.shape)
+
+	N, C, H, W = x.shape
+	H_pool = pool_param['pool_height']
+	W_pool = pool_param['pool_width']
+	stride = pool_param['stride']
+
+	out_H = (H - H_pool) // stride + 1
+	out_W = (W - W_pool) // stride + 1
+
+	for i in range(out_H):
+		for j in range(out_W):
+			x_selected = x[:, :, i * stride: (i * stride + H_pool), j * stride: (j * stride + W_pool)]
+			x_selected_max = np.amax(x_selected, axis=(2, 3))
+			x_selected_binary_index = x_selected == x_selected_max[:, :, np.newaxis, np.newaxis]
+			dx[:, :, i * stride: (i * stride + H_pool), j * stride: (j * stride + W_pool)] += x_selected_binary_index * dout[:, :, i, j][:, :, np.newaxis, np.newaxis]
 	###########################################################################
 	#                             END OF YOUR CODE                            #
 	###########################################################################
